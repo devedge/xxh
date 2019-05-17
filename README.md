@@ -1,0 +1,2 @@
+# xxh
+CLI xxHash tool
