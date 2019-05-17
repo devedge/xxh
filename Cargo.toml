@@ -5,3 +5,4 @@ authors = ["devedge <richard.pjski2@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+twox-hash = "1.2.0"
