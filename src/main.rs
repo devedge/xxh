@@ -1,28 +1,81 @@
-use std::env;
+// use std::env;
 use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufRead, BufReader};
 use twox_hash::XxHash;
+use std::thread;
+
+// structopt stuff
+// #[macro_use] // not using??
+extern crate structopt;
+use std::path::PathBuf;
+use structopt::StructOpt;
+
+#[derive(StructOpt, Debug)]
+#[structopt(name = "xxh", about = "xxHash cli implementation")]
+struct Opt {
+    #[structopt(name = "FILE", parse(from_os_str))]
+    files: Vec<PathBuf>,
+}
+
+// TODO:
+// - clap argument parser - DONE
+// - custom seed
+// - hash in a thread - DONE
+// - use channels to log hash progress
+
+// use clap to get filename - DONE
+// print the size of the file
+// run the hash in a thread - DONE
+// put a channel in the thread
+// send a message through the channel
+// etc...
 
 fn main() {
-    for arg in env::args().skip(1) {
-        let f = File::open(&arg).unwrap();
-        let mut f = BufReader::new(f);
+    let opt = Opt::from_args();
 
-        let mut hasher = XxHash::with_seed(0);
+    //  88% (514.2 GB/s)  /path/to/file
+    // d4341417a49741c3  /path/to/file
 
-        loop {
-            let consumed = {
-                let bytes = f.fill_buf().unwrap();
-                if bytes.len() == 0 {
-                    break;
-                }
-                hasher.write(bytes);
-                bytes.len()
-            };
-            f.consume(consumed);
-        }
+    // s, r -> chan of size 1
+    // hash {
+    //   keep hashing
+    //   try to update channel
+    //   if queue is full, don't wait for update
+    //     pop the value off so its always up to date??
+    //   when done, return hash somehow?
+    // }
+    // print {
+    //   print line indicating progress
+    //   wait predetermined time
+    //   pull value off of channel (will be old??)
+    // }
 
-        println!("{:16x}   {}", hasher.finish(), arg);
+    for fp in opt.files {
+        // println!("{:?}", &fp);
+
+        let handle = thread::spawn(move || {
+            let mut buffer = BufReader::new(File::open(&fp).unwrap());
+
+            let mut hasher = XxHash::with_seed(0);
+
+            loop {
+                let consumed = {
+                    let bytes = buffer.fill_buf().unwrap();
+                    if bytes.len() == 0 {
+                        break;
+                    }
+                    hasher.write(bytes);
+                    // println!("{}", bytes.len());
+                    bytes.len()
+                };
+                buffer.consume(consumed);
+            }
+
+            println!("{:x}  {}", hasher.finish(), fp.display());
+        });
+
+        // block on thread completion
+        handle.join().unwrap();
     }
 }
