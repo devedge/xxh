@@ -3,11 +3,16 @@ use std::fs::File;
 use std::hash::Hasher;
 use std::io::{BufRead, BufReader};
 use twox_hash::XxHash;
+
+use std::time::Duration;
 use std::thread;
+
+// extern crate crossbeam_channel;
+use crossbeam_channel::bounded;
 
 // structopt stuff
 // #[macro_use] // not using??
-extern crate structopt;
+// extern crate structopt;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -27,8 +32,8 @@ struct Opt {
 // use clap to get filename - DONE
 // print the size of the file
 // run the hash in a thread - DONE
-// put a channel in the thread
-// send a message through the channel
+// put a channel in the thread - DONE
+// send a message through the channel - DONE
 // etc...
 
 fn main() {
@@ -42,7 +47,7 @@ fn main() {
     //   keep hashing
     //   try to update channel
     //   if queue is full, don't wait for update
-    //     pop the value off so its always up to date??
+    //     pop the value off so its always up to date?? nah
     //   when done, return hash somehow?
     // }
     // print {
@@ -52,11 +57,13 @@ fn main() {
     // }
 
     for fp in opt.files {
-        // println!("{:?}", &fp);
+        let f = File::open(&fp).unwrap();
+
+        let (s, r) = bounded(1);
+        let (s2, r2) = bounded(1);
 
         let handle = thread::spawn(move || {
-            let mut buffer = BufReader::new(File::open(&fp).unwrap());
-
+            let mut buffer = BufReader::new(f);
             let mut hasher = XxHash::with_seed(0);
 
             loop {
@@ -66,16 +73,29 @@ fn main() {
                         break;
                     }
                     hasher.write(bytes);
-                    // println!("{}", bytes.len());
+
+                    if s.is_empty() {
+                        s.send(bytes.len()).unwrap();
+                    }
                     bytes.len()
                 };
                 buffer.consume(consumed);
             }
 
-            println!("{:x}  {}", hasher.finish(), fp.display());
+            s2.send(hasher.finish()).unwrap();
         });
+
+        while r2.is_empty() {
+            if r.is_full() {
+                println!("{}", r.recv().unwrap());
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
 
         // block on thread completion
         handle.join().unwrap();
+
+
+        println!("{:x}  {}", r2.recv().unwrap(), fp.display());
     }
 }
