@@ -4,10 +4,10 @@ use std::hash::Hasher;
 use std::io::{BufRead, BufReader};
 use twox_hash::XxHash;
 
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
-// extern crate crossbeam_channel;
+extern crate crossbeam_channel;
 use crossbeam_channel::bounded;
 
 // structopt stuff
@@ -30,7 +30,7 @@ struct Opt {
 // - use channels to log hash progress
 
 // use clap to get filename - DONE
-// print the size of the file
+// print the size of the file - DONE
 // run the hash in a thread - DONE
 // put a channel in the thread - DONE
 // send a message through the channel - DONE
@@ -39,32 +39,18 @@ struct Opt {
 fn main() {
     let opt = Opt::from_args();
 
-    //  88% (514.2 GB/s)  /path/to/file
-    // d4341417a49741c3  /path/to/file
-
-    // s, r -> chan of size 1
-    // hash {
-    //   keep hashing
-    //   try to update channel
-    //   if queue is full, don't wait for update
-    //     pop the value off so its always up to date?? nah
-    //   when done, return hash somehow?
-    // }
-    // print {
-    //   print line indicating progress
-    //   wait predetermined time
-    //   pull value off of channel (will be old??)
-    // }
-
     for fp in opt.files {
+        // open file here to bypass the borrow checker, so we can still use
+        // 'fp' to print the filename
         let f = File::open(&fp).unwrap();
 
-        let (s, r) = bounded(1);
-        let (s2, r2) = bounded(1);
+        let (tx_progress, rx_progress) = bounded(1);
+        let (tx_result, rx_result) = bounded(1);
 
         let handle = thread::spawn(move || {
             let mut buffer = BufReader::new(f);
             let mut hasher = XxHash::with_seed(0);
+            let mut bytes_processed = 0;
 
             loop {
                 let consumed = {
@@ -73,21 +59,24 @@ fn main() {
                         break;
                     }
                     hasher.write(bytes);
-
-                    if s.is_empty() {
-                        s.send(bytes.len()).unwrap();
-                    }
                     bytes.len()
                 };
+
+                bytes_processed += consumed;
+
+                if tx_progress.is_empty() {
+                    tx_progress.send(bytes_processed).unwrap();
+                }
+
                 buffer.consume(consumed);
             }
 
-            s2.send(hasher.finish()).unwrap();
+            tx_result.send(hasher.finish()).unwrap();
         });
 
-        while r2.is_empty() {
-            if r.is_full() {
-                println!("{}", r.recv().unwrap());
+        while rx_result.is_empty() {
+            if rx_progress.is_full() {
+                println!("{}", rx_progress.recv().unwrap());
             }
             thread::sleep(Duration::from_millis(100));
         }
@@ -95,7 +84,6 @@ fn main() {
         // block on thread completion
         handle.join().unwrap();
 
-
-        println!("{:x}  {}", r2.recv().unwrap(), fp.display());
+        println!("{:x}  {}", rx_result.recv().unwrap(), fp.display());
     }
 }
