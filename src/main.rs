@@ -5,14 +5,14 @@ use std::io::{BufRead, BufReader};
 use twox_hash::XxHash;
 
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
-extern crate crossbeam_channel;
+use crossterm::{ClearType, cursor, terminal};
+
+use number_prefix::{NumberPrefix, Prefixed, Standalone};
+
 use crossbeam_channel::bounded;
 
-// structopt stuff
-// #[macro_use] // not using??
-// extern crate structopt;
 use std::path::PathBuf;
 use structopt::StructOpt;
 
@@ -23,30 +23,29 @@ struct Opt {
     files: Vec<PathBuf>,
 }
 
-// TODO:
-// - clap argument parser - DONE
-// - custom seed
-// - hash in a thread - DONE
-// - use channels to log hash progress
-
-// use clap to get filename - DONE
-// print the size of the file - DONE
-// run the hash in a thread - DONE
-// put a channel in the thread - DONE
-// send a message through the channel - DONE
-// etc...
-
 fn main() {
     let opt = Opt::from_args();
+    let terminal = terminal();
+    let cursor = cursor();
+
+    // save the terminal cursor position at the start of the line, so the
+    // progress can be displayed inline
+    cursor.save_position();
 
     for fp in opt.files {
         // open file here to bypass the borrow checker, so we can still use
         // 'fp' to print the filename
         let f = File::open(&fp).unwrap();
+        let filename = fp.display();
+        // let metadata = fs::metadata(&fp).unwrap();
+        // println!("{}", metadata.len());
 
         let (tx_progress, rx_progress) = bounded(1);
         let (tx_result, rx_result) = bounded(1);
 
+        let start = SystemTime::now();
+
+        // start hashing thread
         let handle = thread::spawn(move || {
             let mut buffer = BufReader::new(f);
             let mut hasher = XxHash::with_seed(0);
@@ -74,16 +73,41 @@ fn main() {
             tx_result.send(hasher.finish()).unwrap();
         });
 
+        // poll the queue for hashing progress
         while rx_result.is_empty() {
+
             if rx_progress.is_full() {
-                println!("{}", rx_progress.recv().unwrap());
+                let elapsed = start.elapsed().unwrap();
+                let micros = elapsed.as_micros(); // - 250000u128;
+                let sec = micros as f64 / 1000000f64;
+                // dbg!(elapsed);
+                // dbg!(micros);
+                // dbg!(sec);
+                let b = rx_progress.recv().unwrap();
+                // dbg!(b);
+
+                let bytes_sec = b as f64 / sec;
+
+                match NumberPrefix::binary(bytes_sec) {
+                    Standalone(bytes) => print!("{} bytes/s  {}", bytes, filename),
+                    Prefixed(prefix, n) => print!("{:.1} {}B/s  {}", n, prefix, filename),
+                }
+
+                // reset terminal cursor to start of line
+                cursor.reset_position();
             }
+
+            // sleep for a few milliseconds
             thread::sleep(Duration::from_millis(100));
+            
+            // clear the current line after the cursor has been reset to the 
+            // start
+            terminal.clear(ClearType::CurrentLine);
         }
 
-        // block on thread completion
+        // join the hashing thread
         handle.join().unwrap();
 
-        println!("{:x}  {}", rx_result.recv().unwrap(), fp.display());
+        println!("{:x}  {}", rx_result.recv().unwrap(), filename);
     }
 }
