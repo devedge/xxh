@@ -1,7 +1,7 @@
 use crossbeam_channel::bounded;
 use crossterm::{cursor, terminal, ClearType};
 use number_prefix::{NumberPrefix, Prefixed, Standalone};
-use std::fs::File;
+use std::fs::{metadata as Metadata, File};
 use std::hash::Hasher;
 use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
@@ -27,8 +27,7 @@ fn main() {
         // 'fp' to print the filename
         let f = File::open(&fp).unwrap();
         let filename = fp.display();
-        // let metadata = fs::metadata(&fp).unwrap();
-        // println!("{}", metadata.len());
+        let filesize = Metadata(&fp).unwrap().len();
 
         // save the terminal cursor position at the start of the line, so the
         // progress can be displayed inline
@@ -70,21 +69,30 @@ fn main() {
         // poll the queue for hashing progress
         while rx_result.is_empty() {
             if rx_progress.is_full() {
+                // clear terminal line
+                terminal.clear(ClearType::CurrentLine).unwrap();
+
                 // determine elapsed seconds, to microsecond precision
                 let secs_elapsed = start.elapsed().unwrap().as_micros() as f64 / 1_000_000f64;
                 let bytes_recv = rx_progress.recv().unwrap();
                 let bytes_per_sec = bytes_recv as f64 / secs_elapsed;
+                let progress_percent = ((bytes_recv as f64 / filesize as f64) * 100f64).round();
 
                 match NumberPrefix::binary(bytes_per_sec) {
-                    Standalone(bytes) => print!("{} bytes/s\t{}", bytes, filename),
-                    Prefixed(prefix, n) => print!("{:.1} {}B/s\t{}", n, prefix, filename),
+                    Standalone(bytes) => {
+                        print!(" {}% {} bytes/s\t{}", progress_percent, bytes, filename)
+                    }
+                    Prefixed(prefix, n) => print!(
+                        " {}% {:.1} {}B/s\t{}",
+                        progress_percent, n, prefix, filename
+                    ),
                 }
 
+                // reset position to start of terminal line
                 cursor.reset_position().unwrap();
             }
-            thread::sleep(Duration::from_millis(250));
 
-            terminal.clear(ClearType::CurrentLine).unwrap();
+            thread::sleep(Duration::from_millis(250));
         }
 
         handle.join().unwrap();
