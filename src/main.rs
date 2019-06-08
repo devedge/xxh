@@ -76,15 +76,21 @@ fn main() {
                 let secs_elapsed = start.elapsed().unwrap().as_micros() as f64 / 1_000_000f64;
                 let bytes_recv = rx_progress.recv().unwrap();
                 let bytes_per_sec = bytes_recv as f64 / secs_elapsed;
+                let secs_remaining = filesize as f64 / bytes_per_sec;
                 let progress_percent = ((bytes_recv as f64 / filesize as f64) * 100f64).round();
+
+                // format time dynamically (show only seconds if under a min, etc)
+                // space out different outputs evenly
+                // determine whether to either truncate the filename, or determine what
+                //  the issue is when the filename is longer than the terminal line
 
                 match NumberPrefix::binary(bytes_per_sec) {
                     Standalone(bytes) => {
-                        print!(" {}% {} bytes/s\t{}", progress_percent, bytes, filename)
+                        print!(" {}% {} bytes/s\t{}", progress_percent, bytes, secs_remaining)
                     }
                     Prefixed(prefix, n) => print!(
                         " {}% {:.1} {}B/s\t{}",
-                        progress_percent, n, prefix, filename
+                        progress_percent, n, prefix, secs_remaining
                     ),
                 }
 
