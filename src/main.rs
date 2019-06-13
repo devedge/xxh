@@ -66,7 +66,7 @@ fn main() {
             tx_result.send(hasher.finish()).unwrap();
         });
 
-        // while the hash hasn't been passed in the 'result' channel, poll the 
+        // while the hash hasn't been passed in the 'result' channel, poll the
         // 'progress' channel for the latest amount of bytes last processed
         while rx_result.is_empty() {
             if rx_progress.is_full() {
@@ -84,28 +84,40 @@ fn main() {
                 // determine whether to either truncate the filename, or determine what
                 //  the issue is when the filename is longer than the terminal line
 
-                // TODO: negative/incorrect time
-                let time_remaining = 
-                    if secs_remaining >= 0f64 && secs_remaining < 60f64 {
-                        [secs_remaining.to_string(), "s".to_string()].join("")
-                    } else if secs_remaining < 3600f64 {
-                        let min = (secs_remaining / 60f64).floor();
-                        let sec = secs_remaining % 60f64;
+                let time_remaining = if secs_remaining < 60f64 {
+                    [secs_remaining.to_string(), "s".to_string()].join("")
+                } else if secs_remaining < 3600f64 {
+                    let min = (secs_remaining / 60f64).floor();
+                    let sec = secs_remaining % 60f64;
 
-                        [min.to_string(), "m".to_string(), sec.to_string(), "s".to_string()].join("")
+                    [
+                        min.to_string(),
+                        "m".to_string(),
+                        sec.to_string(),
+                        "s".to_string(),
+                    ]
+                    .join("")
+                } else {
+                    let hour = (secs_remaining / 3600f64).floor();
+                    let min = ((secs_remaining - (hour * 3600f64)) / 60f64).floor();
+                    let sec = secs_remaining % 60f64;
 
-                    } else {
-                        let hour = (secs_remaining / 3600f64).floor();
-                        let min = ((secs_remaining - (hour * 3600f64)) / 60f64).floor();
-                        let sec = secs_remaining % 60f64;
-
-                        [hour.to_string(), "h".to_string(), min.to_string(), "m".to_string() , sec.to_string(), "s".to_string()].join("")
-                    };
+                    [
+                        hour.to_string(),
+                        "h".to_string(),
+                        min.to_string(),
+                        "m".to_string(),
+                        sec.to_string(),
+                        "s".to_string(),
+                    ]
+                    .join("")
+                };
 
                 match NumberPrefix::binary(bytes_per_sec) {
-                    Standalone(bytes) => {
-                        print!(" {}% {} bytes/s {}", progress_percent, bytes, time_remaining)
-                    }
+                    Standalone(bytes) => print!(
+                        " {}% {} bytes/s {}",
+                        progress_percent, bytes, time_remaining
+                    ),
                     Prefixed(prefix, n) => print!(
                         " {}% {:.1} {}B/s {}",
                         progress_percent, n, prefix, time_remaining
