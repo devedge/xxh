@@ -85,32 +85,33 @@ fn main() {
                 //  the issue is when the filename is longer than the terminal line
 
                 let time_remaining = if secs_remaining < 60f64 {
-                    [secs_remaining.to_string(), "s".to_string()].join("")
+                    let mut time_string = String::with_capacity(3);
+                    time_string.push_str(&secs_remaining.to_string());
+                    time_string.push('s');
+                    time_string
                 } else if secs_remaining < 3600f64 {
                     let min = (secs_remaining / 60f64).floor();
                     let sec = secs_remaining % 60f64;
 
-                    [
-                        min.to_string(),
-                        "m".to_string(),
-                        sec.to_string(),
-                        "s".to_string(),
-                    ]
-                    .join("")
+                    let mut time_string = String::with_capacity(6);
+                    time_string.push_str(&min.to_string());
+                    time_string.push('m');
+                    time_string.push_str(&sec.to_string());
+                    time_string.push('s');
+                    time_string
                 } else {
                     let hour = (secs_remaining / 3600f64).floor();
                     let min = ((secs_remaining - (hour * 3600f64)) / 60f64).floor();
                     let sec = secs_remaining % 60f64;
 
-                    [
-                        hour.to_string(),
-                        "h".to_string(),
-                        min.to_string(),
-                        "m".to_string(),
-                        sec.to_string(),
-                        "s".to_string(),
-                    ]
-                    .join("")
+                    let mut time_string = String::with_capacity(9);
+                    time_string.push_str(&hour.to_string());
+                    time_string.push('h');
+                    time_string.push_str(&min.to_string());
+                    time_string.push('m');
+                    time_string.push_str(&sec.to_string());
+                    time_string.push('s');
+                    time_string
                 };
 
                 match NumberPrefix::binary(bytes_per_sec) {
